@@ -1,0 +1,10 @@
+{
+  "id": "jina-reader",
+  "name": "Jina Reader",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Fetches Markdown content from a URL using Jina Reader and applies it to the current note.",
+  "author": "Trae",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
