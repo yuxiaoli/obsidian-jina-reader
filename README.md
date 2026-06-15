@@ -6,7 +6,8 @@ Jina Reader is an Obsidian plugin that allows you to easily fetch the Markdown c
 
 - Extract clean Markdown from any URL using Jina Reader.
 - Replace your entire note with the fetched content or insert it right below the detected URL.
-- Automatically detects the URL from your current text selection.
+- Automatically detects the URL from your current text selection, the current line, or the entire note.
+- Search the web, images, or news with Jina Search and insert the results as Markdown.
 - Protects your notes by warning you if the content changes while a fetch request is pending.
 
 ## Installation
@@ -46,6 +47,8 @@ You can customize the plugin behavior in **Settings** > **Jina Reader**:
 - **Require API Key**: If enabled, the plugin will require an API key to function.
 - **Load .env from Vault Root**: Whether to attempt loading the `.env` file.
 - **Reader Base URL**: The endpoint for Jina Reader (Default: `https://r.jina.ai/`).
+- **Search Base URL**: The endpoint for Jina Search (Default: `https://s.jina.ai/`).
+- **Search Result Count, Type, and Provider**: Control the result set returned by Jina Search.
 - **Timeout**: The network request timeout in seconds.
 - **Default Behavior**: Choose how the fetched Markdown is applied (either `replace` or `insert_below`).
 
@@ -55,8 +58,9 @@ You can customize the plugin behavior in **Settings** > **Jina Reader**:
 2. Open the Command Palette (`Ctrl/Cmd + P`).
 3. Run one of the following commands:
    - **Jina Reader: Fetch URL using Default Behavior**
-   - **Jina Reader: Replace Note with Markdown**
-   - **Jina Reader: Insert Markdown Below URL**
+   - **Jina Reader: Search and insert results**
+
+For search, select the query text before running the command. If nothing is selected, the plugin opens a query prompt. Results are inserted after the selection or at the cursor.
 
 ### Behaviors Explained
 
@@ -72,7 +76,7 @@ To make fetching even faster, you can assign a hotkey (like `Ctrl+Alt+J` or `Cmd
 
 ## Troubleshooting
 
-- **No URL found?** Check that the current note contains a valid `http://` or `https://` URL and ensure it is selected/highlighted.
+- **No URL found?** Check that the current note contains a valid `http://` or `https://` URL. Make sure it's selected, on your current line, or somewhere in the note.
 - **.env file issues?** Check that `.env` is located exactly in the vault root, not inside a subfolder or the `.obsidian` folder.
 - **API Key not loading from OS?** Restart Obsidian if you're using OS environment variables instead of a `.env` file.
 - **Missing API key errors?** If you set "Require API Key" to true, verify that your configured key name matches what's in the `.env` file.

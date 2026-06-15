@@ -9,7 +9,11 @@ export interface JinaReaderSettings {
     readerBaseUrl: string;
     timeoutSeconds: number;
     accept: string;
-    defaultBehavior: 'replace' | 'insert_below';
+    defaultBehavior: "replace" | "insert_below";
+    searchBaseUrl: string;
+    searchResultCount: number;
+    searchType: "web" | "images" | "news";
+    searchProvider: "default" | "google" | "bing" | "reader";
 }
 
 export const DEFAULT_SETTINGS: JinaReaderSettings = {
@@ -20,7 +24,11 @@ export const DEFAULT_SETTINGS: JinaReaderSettings = {
     readerBaseUrl: "https://r.jina.ai/",
     timeoutSeconds: 60,
     accept: "text/plain; charset=utf-8",
-    defaultBehavior: "replace"
+    defaultBehavior: "replace",
+    searchBaseUrl: "https://s.jina.ai/",
+    searchResultCount: 5,
+    searchType: "web",
+    searchProvider: "default"
 };
 
 export class JinaReaderSettingTab extends PluginSettingTab {
@@ -120,8 +128,62 @@ export class JinaReaderSettingTab extends PluginSettingTab {
                 .addOption("replace", "Replace")
                 .addOption("insert_below", "Insert Below")
                 .setValue(this.plugin.settings.defaultBehavior)
-                .onChange(async (value: 'replace' | 'insert_below') => {
+                .onChange(async (value: "replace" | "insert_below") => {
                     this.plugin.settings.defaultBehavior = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        containerEl.createEl("h3", { text: "Jina Search" });
+
+        new Setting(containerEl)
+            .setName("Search Base URL")
+            .setDesc("The Jina Search endpoint.")
+            .addText(text => text
+                .setPlaceholder("https://s.jina.ai/")
+                .setValue(this.plugin.settings.searchBaseUrl)
+                .onChange(async (value) => {
+                    this.plugin.settings.searchBaseUrl = value || DEFAULT_SETTINGS.searchBaseUrl;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Search Result Count")
+            .setDesc("Number of results to request, from 1 to 20.")
+            .addText(text => text
+                .setPlaceholder("5")
+                .setValue(this.plugin.settings.searchResultCount.toString())
+                .onChange(async (value) => {
+                    const parsed = parseInt(value, 10);
+                    if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
+                        this.plugin.settings.searchResultCount = parsed;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName("Search Type")
+            .setDesc("Choose web, image, or news results.")
+            .addDropdown(dropdown => dropdown
+                .addOption("web", "Web")
+                .addOption("images", "Images")
+                .addOption("news", "News")
+                .setValue(this.plugin.settings.searchType)
+                .onChange(async (value: "web" | "images" | "news") => {
+                    this.plugin.settings.searchType = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Search Provider")
+            .setDesc("Use the API default provider or select one explicitly.")
+            .addDropdown(dropdown => dropdown
+                .addOption("default", "Default")
+                .addOption("google", "Google")
+                .addOption("bing", "Bing")
+                .addOption("reader", "Reader")
+                .setValue(this.plugin.settings.searchProvider)
+                .onChange(async (value: "default" | "google" | "bing" | "reader") => {
+                    this.plugin.settings.searchProvider = value;
                     await this.plugin.saveSettings();
                 }));
     }

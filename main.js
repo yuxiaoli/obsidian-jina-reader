@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => JinaReaderPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
@@ -39,7 +39,11 @@ var DEFAULT_SETTINGS = {
   readerBaseUrl: "https://r.jina.ai/",
   timeoutSeconds: 60,
   accept: "text/plain; charset=utf-8",
-  defaultBehavior: "replace"
+  defaultBehavior: "replace",
+  searchBaseUrl: "https://s.jina.ai/",
+  searchResultCount: 5,
+  searchType: "web",
+  searchProvider: "default"
 };
 var JinaReaderSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -84,6 +88,26 @@ var JinaReaderSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.defaultBehavior = value;
       await this.plugin.saveSettings();
     }));
+    containerEl.createEl("h3", { text: "Jina Search" });
+    new import_obsidian.Setting(containerEl).setName("Search Base URL").setDesc("The Jina Search endpoint.").addText((text) => text.setPlaceholder("https://s.jina.ai/").setValue(this.plugin.settings.searchBaseUrl).onChange(async (value) => {
+      this.plugin.settings.searchBaseUrl = value || DEFAULT_SETTINGS.searchBaseUrl;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Search Result Count").setDesc("Number of results to request, from 1 to 20.").addText((text) => text.setPlaceholder("5").setValue(this.plugin.settings.searchResultCount.toString()).onChange(async (value) => {
+      const parsed = parseInt(value, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 20) {
+        this.plugin.settings.searchResultCount = parsed;
+        await this.plugin.saveSettings();
+      }
+    }));
+    new import_obsidian.Setting(containerEl).setName("Search Type").setDesc("Choose web, image, or news results.").addDropdown((dropdown) => dropdown.addOption("web", "Web").addOption("images", "Images").addOption("news", "News").setValue(this.plugin.settings.searchType).onChange(async (value) => {
+      this.plugin.settings.searchType = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Search Provider").setDesc("Use the API default provider or select one explicitly.").addDropdown((dropdown) => dropdown.addOption("default", "Default").addOption("google", "Google").addOption("bing", "Bing").addOption("reader", "Reader").setValue(this.plugin.settings.searchProvider).onChange(async (value) => {
+      this.plugin.settings.searchProvider = value;
+      await this.plugin.saveSettings();
+    }));
   }
 };
 
@@ -98,8 +122,22 @@ function detectUrl(editor) {
   if (selection) {
     const url = extractUrlFromText(selection);
     if (url) {
-      const cursor = editor.getCursor("from");
-      return { url, lineIndex: cursor.line };
+      const cursor2 = editor.getCursor("from");
+      return { url, lineIndex: cursor2.line };
+    }
+  }
+  const cursor = editor.getCursor();
+  const currentLine = editor.getLine(cursor.line);
+  const urlFromLine = extractUrlFromText(currentLine);
+  if (urlFromLine) {
+    return { url: urlFromLine, lineIndex: cursor.line };
+  }
+  const lineCount = editor.lineCount();
+  for (let i = 0; i < lineCount; i++) {
+    const line = editor.getLine(i);
+    const urlFromNote = extractUrlFromText(line);
+    if (urlFromNote) {
+      return { url: urlFromNote, lineIndex: i };
     }
   }
   return null;
@@ -123,7 +161,7 @@ async function fetchJinaReaderMarkdown(url, settings, apiKey) {
     url: targetUrl,
     method: "GET",
     headers,
-    throwOnError: false
+    throw: false
   });
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
@@ -139,6 +177,54 @@ async function fetchJinaReaderMarkdown(url, settings, apiKey) {
   } catch (error) {
     throw error;
   }
+}
+
+// src/jinaSearch.ts
+var import_obsidian3 = require("obsidian");
+async function fetchJinaSearchMarkdown(query, settings, apiKey) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    throw new Error("Search query cannot be empty");
+  }
+  if (!apiKey) {
+    throw new Error("API key is required for Jina Search");
+  }
+  let baseUrl = settings.searchBaseUrl;
+  if (!baseUrl.endsWith("/")) {
+    baseUrl += "/";
+  }
+  const params = new URLSearchParams();
+  params.set("type", settings.searchType);
+  params.set("num", settings.searchResultCount.toString());
+  if (settings.searchProvider !== "default") {
+    params.set("provider", settings.searchProvider);
+  }
+  const targetUrl = `${baseUrl}${encodeURIComponent(normalizedQuery)}?${params.toString()}`;
+  const headers = {
+    "Accept": "text/plain",
+    "Authorization": `Bearer ${apiKey}`
+  };
+  const searchPromise = (0, import_obsidian3.requestUrl)({
+    url: targetUrl,
+    method: "GET",
+    headers,
+    throw: false
+  });
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error("Search request timed out"));
+    }, settings.timeoutSeconds * 1e3);
+  });
+  const response = await Promise.race([searchPromise, timeoutPromise]);
+  if (response.status >= 400) {
+    const details = response.text.trim().slice(0, 500);
+    throw new Error(`Search HTTP ${response.status}${details ? `: ${details}` : ""}`);
+  }
+  const markdown = response.text.trim();
+  if (!markdown) {
+    throw new Error("Jina Search returned an empty response");
+  }
+  return markdown;
 }
 
 // src/dotenv.ts
@@ -167,7 +253,7 @@ function parseDotenv(content) {
 }
 
 // src/main.ts
-var ConfirmModal = class extends import_obsidian3.Modal {
+var ConfirmModal = class extends import_obsidian4.Modal {
   constructor(app, message, onConfirm, onCancel) {
     super(app);
     this.message = message;
@@ -194,7 +280,51 @@ var ConfirmModal = class extends import_obsidian3.Modal {
     contentEl.empty();
   }
 };
-var JinaReaderPlugin = class extends import_obsidian3.Plugin {
+var SearchModal = class extends import_obsidian4.Modal {
+  constructor(app, initialQuery, onSubmit) {
+    super(app);
+    this.initialQuery = initialQuery;
+    this.onSubmit = onSubmit;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: "Search with Jina" });
+    const input = contentEl.createEl("input", {
+      attr: {
+        type: "text",
+        placeholder: "Enter a search query",
+        "aria-label": "Jina Search query"
+      }
+    });
+    input.value = this.initialQuery;
+    input.style.width = "100%";
+    const submit = () => {
+      const query = input.value.trim();
+      if (!query) {
+        new import_obsidian4.Notice("Jina Search: Enter a search query.");
+        return;
+      }
+      this.close();
+      this.onSubmit(query);
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    });
+    const buttonContainer = contentEl.createDiv({
+      attr: { style: "display: flex; justify-content: flex-end; margin-top: 16px;" }
+    });
+    const searchButton = buttonContainer.createEl("button", { text: "Search" });
+    searchButton.addEventListener("click", submit);
+    input.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+var JinaReaderPlugin = class extends import_obsidian4.Plugin {
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new JinaReaderSettingTab(this.app, this));
@@ -203,6 +333,20 @@ var JinaReaderPlugin = class extends import_obsidian3.Plugin {
       name: "Fetch URL using Default Behavior",
       editorCallback: async (editor, view) => {
         await this.executeFetch(editor, view, "insert_below");
+      }
+    });
+    this.addCommand({
+      id: "jina-search-insert-results",
+      name: "Search and insert results",
+      editorCallback: (editor) => {
+        const selectedQuery = editor.getSelection().trim();
+        if (selectedQuery) {
+          void this.executeSearch(editor, selectedQuery);
+          return;
+        }
+        new SearchModal(this.app, "", (query) => {
+          void this.executeSearch(editor, query);
+        }).open();
       }
     });
   }
@@ -231,10 +375,10 @@ var JinaReaderPlugin = class extends import_obsidian3.Plugin {
             return dotenvValues[keyName];
           }
         } catch (e) {
-          new import_obsidian3.Notice(`Jina Reader: Error reading ${dotEnvPath} file.`);
+          new import_obsidian4.Notice(`Jina Reader: Error reading ${dotEnvPath} file.`);
         }
       } else if (this.settings.requireApiKey) {
-        new import_obsidian3.Notice(`Jina Reader: ${dotEnvPath} file not found at vault root.`);
+        new import_obsidian4.Notice(`Jina Reader: ${dotEnvPath} file not found at vault root.`);
       }
     }
     return null;
@@ -242,16 +386,16 @@ var JinaReaderPlugin = class extends import_obsidian3.Plugin {
   async executeFetch(editor, view, behavior) {
     const urlMatch = detectUrl(editor);
     if (!urlMatch) {
-      new import_obsidian3.Notice("Jina Reader: No URL found in the current selection.");
+      new import_obsidian4.Notice("Jina Reader: No URL found in the current selection, line, or note.");
       return;
     }
     const apiKey = await this.resolveApiKey();
     if (!apiKey && this.settings.requireApiKey) {
-      new import_obsidian3.Notice(`Jina Reader: Missing API key. Expected in process.env or .env file as ${this.settings.apiKeyEnvVar}.`);
+      new import_obsidian4.Notice(`Jina Reader: Missing API key. Expected in process.env or .env file as ${this.settings.apiKeyEnvVar}.`);
       return;
     }
     const initialContent = editor.getValue();
-    new import_obsidian3.Notice("Jina Reader: fetching Markdown...");
+    new import_obsidian4.Notice("Jina Reader: fetching Markdown...");
     try {
       const markdown = await fetchJinaReaderMarkdown(urlMatch.url, this.settings, apiKey);
       const currentContent = editor.getValue();
@@ -259,20 +403,57 @@ var JinaReaderPlugin = class extends import_obsidian3.Plugin {
         new ConfirmModal(this.app, "The note content changed while fetching. Do you still want to apply the fetched Markdown?", () => {
           this.applyMarkdown(editor, behavior, markdown, urlMatch);
         }, () => {
-          new import_obsidian3.Notice("Jina Reader: Aborted applying Markdown.");
+          new import_obsidian4.Notice("Jina Reader: Aborted applying Markdown.");
         }).open();
       } else {
         this.applyMarkdown(editor, behavior, markdown, urlMatch);
       }
     } catch (error) {
       console.error("Jina Reader Error:", error);
-      new import_obsidian3.Notice(`Jina Reader Error: ${error.message}`);
+      new import_obsidian4.Notice(`Jina Reader Error: ${error.message}`);
+    }
+  }
+  async executeSearch(editor, query) {
+    const apiKey = await this.resolveApiKey();
+    if (!apiKey) {
+      new import_obsidian4.Notice(`Jina Search: API key is required. Please set ${this.settings.apiKeyEnvVar} in your .env file.`);
+      return;
+    }
+    const initialContent = editor.getValue();
+    const insertionPosition = editor.getCursor("to");
+    new import_obsidian4.Notice("Jina Search: searching...");
+    try {
+      const results = await fetchJinaSearchMarkdown(query, this.settings, apiKey);
+      const markdown = `## Jina Search: ${query.replace(/\s+/g, " ")}
+
+${results}`;
+      const insertResults = () => {
+        const position = editor.getValue() === initialContent ? insertionPosition : editor.getCursor();
+        editor.replaceRange(`
+
+${markdown}`, position);
+        new import_obsidian4.Notice("Jina Search: results inserted.");
+      };
+      if (editor.getValue() !== initialContent) {
+        new ConfirmModal(
+          this.app,
+          "The note changed while searching. Insert the results at the current cursor?",
+          insertResults,
+          () => new import_obsidian4.Notice("Jina Search: Aborted inserting results.")
+        ).open();
+      } else {
+        insertResults();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Jina Search Error:", error);
+      new import_obsidian4.Notice(`Jina Search Error: ${message}`);
     }
   }
   applyMarkdown(editor, behavior, markdown, urlMatch) {
     if (behavior === "replace") {
       editor.setValue(markdown);
-      new import_obsidian3.Notice("Jina Reader: note replaced with Markdown.");
+      new import_obsidian4.Notice("Jina Reader: note replaced with Markdown.");
     } else if (behavior === "insert_below") {
       if (urlMatch.lineIndex !== null) {
         const lineContent = editor.getLine(urlMatch.lineIndex);
@@ -286,9 +467,9 @@ ${markdown}`, { line: urlMatch.lineIndex, ch: lineContent.length });
 
 ${markdown}`, { line: lastLine, ch: lastLineLength });
       }
-      new import_obsidian3.Notice("Jina Reader: Markdown inserted.");
+      new import_obsidian4.Notice("Jina Reader: Markdown inserted.");
     } else {
-      new import_obsidian3.Notice(`Jina Reader: Invalid behavior ${behavior}`);
+      new import_obsidian4.Notice(`Jina Reader: Invalid behavior ${behavior}`);
     }
   }
 };

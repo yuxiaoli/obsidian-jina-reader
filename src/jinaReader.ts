@@ -21,7 +21,7 @@ export async function fetchJinaReaderMarkdown(url: string, settings: JinaReaderS
         url: targetUrl,
         method: "GET",
         headers: headers,
-        throwOnError: false,
+        throw: false,
     });
 
     const timeoutPromise = new Promise<RequestUrlResponse>((_, reject) => {

@@ -2,6 +2,7 @@ import { Plugin, Notice, MarkdownView, Editor, Modal, App } from "obsidian";
 import { JinaReaderSettings, DEFAULT_SETTINGS, JinaReaderSettingTab } from "./settings";
 import { detectUrl, UrlMatch } from "./urlDetection";
 import { fetchJinaReaderMarkdown } from "./jinaReader";
+import { fetchJinaSearchMarkdown } from "./jinaSearch";
 import { parseDotenv } from "./dotenv";
 
 class ConfirmModal extends Modal {
@@ -41,6 +42,59 @@ class ConfirmModal extends Modal {
     }
 }
 
+class SearchModal extends Modal {
+    initialQuery: string;
+    onSubmit: (query: string) => void;
+
+    constructor(app: App, initialQuery: string, onSubmit: (query: string) => void) {
+        super(app);
+        this.initialQuery = initialQuery;
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.createEl("h2", { text: "Search with Jina" });
+        const input = contentEl.createEl("input", {
+            attr: {
+                type: "text",
+                placeholder: "Enter a search query",
+                "aria-label": "Jina Search query"
+            }
+        });
+        input.value = this.initialQuery;
+        input.style.width = "100%";
+
+        const submit = () => {
+            const query = input.value.trim();
+            if (!query) {
+                new Notice("Jina Search: Enter a search query.");
+                return;
+            }
+            this.close();
+            this.onSubmit(query);
+        };
+
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                submit();
+            }
+        });
+
+        const buttonContainer = contentEl.createDiv({
+            attr: { style: "display: flex; justify-content: flex-end; margin-top: 16px;" }
+        });
+        const searchButton = buttonContainer.createEl("button", { text: "Search" });
+        searchButton.addEventListener("click", submit);
+        input.focus();
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
 export default class JinaReaderPlugin extends Plugin {
     settings: JinaReaderSettings;
 
@@ -54,6 +108,22 @@ export default class JinaReaderPlugin extends Plugin {
             name: "Fetch URL using Default Behavior",
             editorCallback: async (editor: Editor, view: MarkdownView) => {
                 await this.executeFetch(editor, view, "insert_below");
+            }
+        });
+
+        this.addCommand({
+            id: "jina-search-insert-results",
+            name: "Search and insert results",
+            editorCallback: (editor: Editor) => {
+                const selectedQuery = editor.getSelection().trim();
+                if (selectedQuery) {
+                    void this.executeSearch(editor, selectedQuery);
+                    return;
+                }
+
+                new SearchModal(this.app, "", (query) => {
+                    void this.executeSearch(editor, query);
+                }).open();
             }
         });
     }
@@ -103,7 +173,7 @@ export default class JinaReaderPlugin extends Plugin {
     async executeFetch(editor: Editor, view: MarkdownView, behavior: 'replace' | 'insert_below') {
         const urlMatch = detectUrl(editor);
         if (!urlMatch) {
-            new Notice("Jina Reader: No URL found in the current selection.");
+            new Notice("Jina Reader: No URL found in the current selection, line, or note.");
             return;
         }
 
@@ -133,6 +203,45 @@ export default class JinaReaderPlugin extends Plugin {
         } catch (error: any) {
             console.error("Jina Reader Error:", error);
             new Notice(`Jina Reader Error: ${error.message}`);
+        }
+    }
+
+    async executeSearch(editor: Editor, query: string) {
+        const apiKey = await this.resolveApiKey();
+        if (!apiKey) {
+            new Notice(`Jina Search: API key is required. Please set ${this.settings.apiKeyEnvVar} in your .env file.`);
+            return;
+        }
+
+        const initialContent = editor.getValue();
+        const insertionPosition = editor.getCursor("to");
+        new Notice("Jina Search: searching...");
+
+        try {
+            const results = await fetchJinaSearchMarkdown(query, this.settings, apiKey);
+            const markdown = `## Jina Search: ${query.replace(/\s+/g, " ")}\n\n${results}`;
+            const insertResults = () => {
+                const position = editor.getValue() === initialContent
+                    ? insertionPosition
+                    : editor.getCursor();
+                editor.replaceRange(`\n\n${markdown}`, position);
+                new Notice("Jina Search: results inserted.");
+            };
+
+            if (editor.getValue() !== initialContent) {
+                new ConfirmModal(
+                    this.app,
+                    "The note changed while searching. Insert the results at the current cursor?",
+                    insertResults,
+                    () => new Notice("Jina Search: Aborted inserting results.")
+                ).open();
+            } else {
+                insertResults();
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("Jina Search Error:", error);
+            new Notice(`Jina Search Error: ${message}`);
         }
     }
 
