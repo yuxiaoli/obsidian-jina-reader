@@ -6,7 +6,7 @@ Jina Reader is an Obsidian plugin that allows you to easily fetch the Markdown c
 
 - Extract clean Markdown from any URL using Jina Reader.
 - Replace your entire note with the fetched content or insert it right below the detected URL.
-- Automatically detects the URL from your current text selection, the current line, or the entire note.
+- Automatically detects the URL from your current text selection.
 - Protects your notes by warning you if the content changes while a fetch request is pending.
 
 ## Installation
@@ -72,7 +72,7 @@ To make fetching even faster, you can assign a hotkey (like `Ctrl+Alt+J` or `Cmd
 
 ## Troubleshooting
 
-- **No URL found?** Check that the current note contains a valid `http://` or `https://` URL. Make sure it's selected, on your current line, or somewhere in the note.
+- **No URL found?** Check that the current note contains a valid `http://` or `https://` URL and ensure it is selected/highlighted.
 - **.env file issues?** Check that `.env` is located exactly in the vault root, not inside a subfolder or the `.obsidian` folder.
 - **API Key not loading from OS?** Restart Obsidian if you're using OS environment variables instead of a `.env` file.
 - **Missing API key errors?** If you set "Require API Key" to true, verify that your configured key name matches what's in the `.env` file.

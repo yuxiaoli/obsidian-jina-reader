@@ -103,7 +103,7 @@ export default class JinaReaderPlugin extends Plugin {
     async executeFetch(editor: Editor, view: MarkdownView, behavior: 'replace' | 'insert_below') {
         const urlMatch = detectUrl(editor);
         if (!urlMatch) {
-            new Notice("Jina Reader: No URL found in the current selection, line, or note.");
+            new Notice("Jina Reader: No URL found in the current selection.");
             return;
         }
 

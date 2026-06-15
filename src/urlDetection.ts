@@ -25,23 +25,5 @@ export function detectUrl(editor: Editor): UrlMatch | null {
         }
     }
 
-    // 2. Current editor line
-    const cursor = editor.getCursor();
-    const currentLine = editor.getLine(cursor.line);
-    const urlFromLine = extractUrlFromText(currentLine);
-    if (urlFromLine) {
-        return { url: urlFromLine, lineIndex: cursor.line };
-    }
-
-    // 3. Entire note
-    const lineCount = editor.lineCount();
-    for (let i = 0; i < lineCount; i++) {
-        const line = editor.getLine(i);
-        const urlFromNote = extractUrlFromText(line);
-        if (urlFromNote) {
-            return { url: urlFromNote, lineIndex: i };
-        }
-    }
-
     return null;
 }

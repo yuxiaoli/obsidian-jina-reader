@@ -98,22 +98,8 @@ function detectUrl(editor) {
   if (selection) {
     const url = extractUrlFromText(selection);
     if (url) {
-      const cursor2 = editor.getCursor("from");
-      return { url, lineIndex: cursor2.line };
-    }
-  }
-  const cursor = editor.getCursor();
-  const currentLine = editor.getLine(cursor.line);
-  const urlFromLine = extractUrlFromText(currentLine);
-  if (urlFromLine) {
-    return { url: urlFromLine, lineIndex: cursor.line };
-  }
-  const lineCount = editor.lineCount();
-  for (let i = 0; i < lineCount; i++) {
-    const line = editor.getLine(i);
-    const urlFromNote = extractUrlFromText(line);
-    if (urlFromNote) {
-      return { url: urlFromNote, lineIndex: i };
+      const cursor = editor.getCursor("from");
+      return { url, lineIndex: cursor.line };
     }
   }
   return null;
@@ -256,7 +242,7 @@ var JinaReaderPlugin = class extends import_obsidian3.Plugin {
   async executeFetch(editor, view, behavior) {
     const urlMatch = detectUrl(editor);
     if (!urlMatch) {
-      new import_obsidian3.Notice("Jina Reader: No URL found in the current selection, line, or note.");
+      new import_obsidian3.Notice("Jina Reader: No URL found in the current selection.");
       return;
     }
     const apiKey = await this.resolveApiKey();
